@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b99fc2c39c6c6e4186faa73ffbd9743, type: 3}
+  m_Name: Conveyor
+  m_EditorClassIdentifier: Assembly-CSharp::BuildingData
+  <Description>k__BackingField: 
+  <Cost>k__BackingField: 0
+  <Model>k__BackingField: {fileID: -3789310418963094513, guid: bcb3f66a38194c14290df8e9abdbf9d2, type: 3}
+  <Category>k__BackingField: 3
