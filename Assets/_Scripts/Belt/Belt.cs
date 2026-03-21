@@ -97,11 +97,11 @@ public class Belt : MonoBehaviour, ItemSink
 
     public void LogBeltStartGrid()
     {   
-        Debug.Log($"[Belt] LogBeltStartGrid 被调用");
+        Debug.Log($"[Belt] LogBeltStartGrid is called");
         var grid = FindFirstObjectByType<BuildingGrid>();
         if (grid == null) return;
         Vector2Int cell = GetGridCell(grid);
-        Debug.Log($"[Belt] 传送带起点: ({cell.x}, {cell.y})");
+        Debug.Log($"[Belt] belt start grid: ({cell.x}, {cell.y})");
     }
 
     public Vector2Int GetGridCell(BuildingGrid grid)
@@ -112,12 +112,12 @@ public class Belt : MonoBehaviour, ItemSink
 
     public bool MatchOutputGrid(BuildingGrid grid, Vector2Int outputGrid)
     {
-        Debug.Log($"[Belt] MatchOutputGrid 被调用, grid: {grid}, outputGrid: {outputGrid}");
+        Debug.Log($"[Belt] MatchOutputGrid is called, grid: {grid}, outputGrid: {outputGrid}");
         if(grid == null) return false;
         Vector2Int currentGrid = GetGridCell(grid);
-        Debug.Log($"[Belt] 当前传送带起点: ({currentGrid.x}, {currentGrid.y})");
-        Debug.Log($"[Belt] 目标输出口格子: ({outputGrid.x}, {outputGrid.y})");
-        Debug.Log($"[Belt] 是否匹配: {currentGrid == outputGrid}");
+        Debug.Log($"[Belt] current belt start grid: ({currentGrid.x}, {currentGrid.y})");
+        Debug.Log($"[Belt] target output port grid: ({outputGrid.x}, {outputGrid.y})");
+        Debug.Log($"[Belt] is match: {currentGrid == outputGrid}");
         return grid.WorldToGridPosition(transform.position) == outputGrid;
     }
 }

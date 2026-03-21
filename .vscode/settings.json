@@ -56,7 +56,7 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Grid Building System.sln",
+    "dotnet.defaultSolution": "Grid-Building-System.sln",
     "dotrush.roslyn.projectOrSolutionFiles": [
         "e:\\Workplace-Unity\\Grid Building System\\Grid Building System.sln"
     ]

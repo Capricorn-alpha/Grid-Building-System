@@ -363,7 +363,7 @@ public class BuildingSystem : MonoBehaviour
             if (i == 0)
             {   
                 Vector2Int startCell = grid.WorldToGridPosition(snapped);
-                Debug.Log($"[BuildingSystem] 放置传送带起点(格子): ({startCell.x}, {startCell.y})");
+                Debug.Log($"[BuildingSystem] place belt start grid: ({startCell.x}, {startCell.y})");
                 var startBelt = building.GetComponentInChildren<Belt>(true);
                 if (startBelt != null)
                     startBelt.LogBeltStartGrid();

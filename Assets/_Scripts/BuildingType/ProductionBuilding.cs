@@ -8,7 +8,7 @@ public class ProductionBuilding : Building, ItemSource
     [SerializeField] private bool enableDebugLog = true;
 
     private float productionTimer;
-    private Queue<BeltItem> buffer = new Queue<BeltItem>();
+    private int _pendingOutputCount;
     private bool _isPlaced;
     private BuildingGrid _grid;
     private List<Vector2Int> _outputCells;
@@ -31,13 +31,14 @@ public class ProductionBuilding : Building, ItemSource
     {
         base.OnPlaced();
         if (enableDebugLog)
-            Debug.Log($"[ProductionBuilding] OnPlaced 被调用, name={name}");
+            Debug.Log($"[ProductionBuilding] OnPlaced is called, name={name}");
         
         _isPlaced = true;
+        productionTimer = productionInterval;
         _grid = FindFirstObjectByType<BuildingGrid>();
         if (_grid == null)
         {
-            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] 未找到 BuildingGrid");
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] Can't find BuildingGrid");
             return;
         }
         _outputCells = GetOutputPortGridCoordinates(_grid);
@@ -49,33 +50,34 @@ public class ProductionBuilding : Building, ItemSource
         var list = new List<Vector2Int>();
         if (grid == null)
         {
-            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: grid 为 null");
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: grid is null");
             return list;
         }
         Building root = GetRootBuilding();
         if (root == null)
         {
-            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: 未找到根 Building");
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: Can't find root Building");
             return list;
         }
         if (root.Ports == null || root.Ports.Length == 0)
         {
-            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: Ports 为空");
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetOutputPortGridCoordinates: Ports is empty");
             return list;
         }
         foreach (var port in root.Ports)
-        {
+        {   
+            //Debug.Log(port.transform.forward * BuildingSystem.CellSize);
             if (port == null || port.PortType != PortType.Output) continue;
-            Vector3 worldInFront = port.transform.position + (port.transform.forward * -0.5f) * BuildingSystem.CellSize;
+            Vector3 worldInFront = port.transform.position + 0.5f * BuildingSystem.CellSize * port.transform.forward;
             Vector2Int cell = grid.WorldToGridPosition(worldInFront);
             list.Add(cell);
             if (enableDebugLog)
-                Debug.Log($"[ProductionBuilding] 输出口 port={port.name} -> 格子 ({cell.x}, {cell.y})");
+                Debug.Log($"[ProductionBuilding] outpu port={port.name} -> grid ({cell.x}, {cell.y})");
         }
         if (enableDebugLog && list.Count > 0)
         {
             var coords = string.Join(", ", System.Array.ConvertAll(list.ToArray(), c => $"({c.x}, {c.y})"));
-            Debug.Log($"[ProductionBuilding] 输出口所在格子: {coords}");
+            Debug.Log($"[ProductionBuilding] output ports grid coordinates: {coords}");
         }
         return list;
     }
@@ -96,18 +98,22 @@ public class ProductionBuilding : Building, ItemSource
     {
         if (beltItemPrefab == null)
         {
-            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] Produce: beltItemPrefab 未设置");
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] Produce: beltItemPrefab is not set");
             return;
         }
-        if (buffer == null) buffer = new Queue<BeltItem>();
+        _pendingOutputCount++;
+        if (enableDebugLog) Debug.Log($"[ProductionBuilding] Produce: pending output +1, total={_pendingOutputCount}");
+    }
+
+    private BeltItem CreateOutputBeltItem()
+    {
+        if (beltItemPrefab == null) return null;
         Building root = GetRootBuilding();
         BuildingPort outPort = GetFirstOutputPort(root);
         Vector3 spawnPos = outPort != null
             ? outPort.transform.position + Vector3.up * 0.3f
             : transform.position + Vector3.up * 0.3f;
-        BeltItem newItem = Instantiate(beltItemPrefab, spawnPos, Quaternion.identity);
-        buffer.Enqueue(newItem);
-        if (enableDebugLog) Debug.Log($"[ProductionBuilding] Produce: 生成物品, buffer={buffer.Count}");
+        return Instantiate(beltItemPrefab, spawnPos, Quaternion.identity);
     }
 
     private static BuildingPort GetFirstOutputPort(Building root)
@@ -121,40 +127,44 @@ public class ProductionBuilding : Building, ItemSource
     }
 
     private void TryPushToOutputBelt()
-    {   
-        if(_grid == null || buffer.Count == 0) return;
+    {
+        if (_grid == null || _pendingOutputCount <= 0 || beltItemPrefab == null) return;
 
-        foreach(var cell in _outputCells)
+        foreach (var cell in _outputCells)
         {
-            Debug.Log($"[ProductionBuilding] 尝试推送到输出口格子 ({cell.x}, {cell.y})");
+            if (enableDebugLog)
+                Debug.Log($"[ProductionBuilding] try to push to output port grid ({cell.x}, {cell.y})");
             Building buildingAtCell = _grid.GetBuildingAt(cell);
-            if(buildingAtCell == null) continue;
-            Debug.Log($"[ProductionBuilding] 未检测到建筑, cell: ({cell.x}, {cell.y})");
+            if (buildingAtCell == null)
+            {
+                if (enableDebugLog)
+                    Debug.Log($"[ProductionBuilding] output port grid ({cell.x}, {cell.y}) is empty");
+                continue;
+            }
 
             Belt belt = buildingAtCell.GetComponentInChildren<Belt>(true);
-            Debug.Log($"[ProductionBuilding] 检测到传送带, belt: {belt.name}");
-            if(belt == null) continue;
+            if (belt == null) continue;
 
-            Debug.Log($"[ProductionBuilding] 二次检测传送带, belt: {belt.name}");
-            if(!belt.MatchOutputGrid(_grid, cell)) continue;
+            if (!belt.MatchOutputGrid(_grid, cell)) continue;
+            if (belt.beltItem != null || belt.isSpaceTaken) continue;
 
-            BeltItem frontItem = buffer.Peek();
-            if(belt.TryInputItem(frontItem))
-            {   
-                Debug.Log($"[ProductionBuilding] 输出口格子 ({cell.x}, {cell.y}) 检测到传送带，已推送物品");
-                buffer.Dequeue();
+            BeltItem newItem = CreateOutputBeltItem();
+            if (newItem == null) return;
+
+            if (belt.TryInputItem(newItem))
+            {
+                _pendingOutputCount--;
+                if (enableDebugLog)
+                    Debug.Log($"[ProductionBuilding] pushed to belt, remaining pending output={_pendingOutputCount}");
                 return;
             }
+
+            Destroy(newItem.gameObject);
         }
     }
 
     public bool TryOutputItem(out BeltItem item)
     {
-        if (buffer.Count > 0)
-        {
-            item = buffer.Dequeue();
-            return true;
-        }
         item = null;
         return false;
     }
