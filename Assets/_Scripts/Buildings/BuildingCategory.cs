@@ -6,5 +6,6 @@ public enum BuildingCategory
     Consumption,
     Synthesis,
     Logistics,
+    Miner,
     Testing
 }

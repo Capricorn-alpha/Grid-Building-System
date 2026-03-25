@@ -35,4 +35,27 @@ public class Building : MonoBehaviour
                 r.enabled = active;
         }
     }
+
+    /// <summary>
+    /// 从当前物体沿父链（含自身）向上，取最顶层的 <see cref="Building"/>。
+    /// 与执行 <see cref="Setup"/> 时缓存 <see cref="Ports"/> 的根一致，避免子物体上的逻辑脚本用错端口变换。
+    /// </summary>
+    protected Building GetRootBuilding()
+    {
+        Building root = null;
+        for (Transform t = transform; t != null; t = t.parent)
+        {
+            var b = t.GetComponent<Building>();
+            if (b != null) root = b;
+        }
+        return root;
+    }
+
+    /// <summary>
+    /// 输出口 Transform 已摆在目标格（与传送带同格）时使用：用端口世界坐标直接映射网格，不再叠加 forward 半格偏移。
+    /// </summary>
+    protected static Vector2Int GetGridCellAtPortWorld(BuildingGrid grid, Vector3 portWorldPosition)
+    {
+        return grid.WorldToGridPosition(portWorldPosition);
+    }
 }

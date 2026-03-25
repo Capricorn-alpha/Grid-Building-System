@@ -95,6 +95,18 @@ public class Belt : MonoBehaviour, ItemSink
         return true;
     }
 
+    /// <summary>由建筑等从带上取走当前物品；取走后带格清空，物品 GameObject 由调用方销毁或接管。</summary>
+    public bool TryExtractItem(out BeltItem taken)
+    {
+        taken = null;
+        if (beltItem == null) return false;
+        StopAllCoroutines();
+        taken = beltItem;
+        beltItem = null;
+        isSpaceTaken = false;
+        return true;
+    }
+
     public void LogBeltStartGrid()
     {   
         Debug.Log($"[Belt] LogBeltStartGrid is called");

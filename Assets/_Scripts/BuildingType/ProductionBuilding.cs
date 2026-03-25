@@ -5,6 +5,8 @@ public class ProductionBuilding : Building, ItemSource
 {
     [SerializeField] private BeltItem beltItemPrefab;
     [SerializeField] private float productionInterval = 5f;
+    [Tooltip("推到输出带上的产物 BeltItem.id")]
+    [SerializeField] private string outputItemId = "product";
     [SerializeField] private bool enableDebugLog = true;
 
     private float productionTimer;
@@ -12,12 +14,16 @@ public class ProductionBuilding : Building, ItemSource
     private bool _isPlaced;
     private BuildingGrid _grid;
     private List<Vector2Int> _outputCells;
+    private List<Vector2Int> _inputCells;
+    private readonly Queue<string> _inputInventory = new();
 
     private void Update()
     {
         if(!_isPlaced) return;
 
-        productionTimer -= productionInterval * Time.deltaTime;
+        TryPullFromInputBelts();
+
+        productionTimer -= Time.deltaTime;
         if (productionTimer <= 0f)
         {
             productionTimer += productionInterval;
@@ -43,6 +49,64 @@ public class ProductionBuilding : Building, ItemSource
         }
         _outputCells = GetOutputPortGridCoordinates(_grid);
         if (_outputCells == null) _outputCells = new List<Vector2Int>();
+        _inputCells = GetInputPortGridCoordinates(_grid);
+        if (_inputCells == null) _inputCells = new List<Vector2Int>();
+    }
+
+    private List<Vector2Int> GetInputPortGridCoordinates(BuildingGrid grid)
+    {
+        var list = new List<Vector2Int>();
+        if (grid == null)
+        {
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetInputPortGridCoordinates: grid is null");
+            return list;
+        }
+        Building root = GetRootBuilding();
+        if (root == null)
+        {
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetInputPortGridCoordinates: Can't find root Building");
+            return list;
+        }
+        if (root.Ports == null || root.Ports.Length == 0)
+        {
+            if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] GetInputPortGridCoordinates: Ports is empty");
+            return list;
+        }
+        foreach (var port in root.Ports)
+        {
+            if (port == null || port.PortType != PortType.Input) continue;
+            Vector2Int cell = GetGridCellAtPortWorld(grid, port.transform.position);
+            list.Add(cell);
+            if (enableDebugLog)
+                Debug.Log($"[ProductionBuilding] input port={port.name} -> grid ({cell.x}, {cell.y})");
+        }
+        return list;
+    }
+
+    private void TryPullFromInputBelts()
+    {
+        if (_grid == null || _inputCells == null || _inputCells.Count == 0) return;
+
+        foreach (var cell in _inputCells)
+        {
+            Building buildingAtCell = _grid.GetBuildingAt(cell);
+            if (buildingAtCell == null) continue;
+
+            Belt belt = buildingAtCell.GetComponentInChildren<Belt>(true);
+            if (belt == null) continue;
+            if (!belt.MatchOutputGrid(_grid, cell)) continue;
+            if (belt.beltItem == null) continue;
+
+            if (!belt.TryExtractItem(out BeltItem taken) || taken == null) continue;
+
+            string id = string.IsNullOrEmpty(taken.id) ? "item" : taken.id;
+            _inputInventory.Enqueue(id);
+            Destroy(taken.gameObject);
+
+            if (enableDebugLog)
+                Debug.Log($"[ProductionBuilding] accepted belt item id={id}, inventory count={_inputInventory.Count}");
+            return;
+        }
     }
 
     public List<Vector2Int> GetOutputPortGridCoordinates(BuildingGrid grid)
@@ -65,11 +129,9 @@ public class ProductionBuilding : Building, ItemSource
             return list;
         }
         foreach (var port in root.Ports)
-        {   
-            //Debug.Log(port.transform.forward * BuildingSystem.CellSize);
+        {
             if (port == null || port.PortType != PortType.Output) continue;
-            Vector3 worldInFront = port.transform.position + 0.5f * BuildingSystem.CellSize * port.transform.forward;
-            Vector2Int cell = grid.WorldToGridPosition(worldInFront);
+            Vector2Int cell = GetGridCellAtPortWorld(grid, port.transform.position);
             list.Add(cell);
             if (enableDebugLog)
                 Debug.Log($"[ProductionBuilding] outpu port={port.name} -> grid ({cell.x}, {cell.y})");
@@ -82,27 +144,24 @@ public class ProductionBuilding : Building, ItemSource
         return list;
     }
 
-    private Building GetRootBuilding()
-    {
-        Transform current = transform.parent;
-        while (current != null)
-        {
-            var b = current.GetComponent<Building>();
-            if (b != null && b != this) return b;
-            current = current.parent;
-        }
-        return null;
-    }
-
     private void Produce()
     {
+        if (_inputInventory.Count == 0)
+        {
+            if (enableDebugLog)
+                Debug.Log("[ProductionBuilding] Produce skipped: input inventory empty");
+            return;
+        }
         if (beltItemPrefab == null)
         {
             if (enableDebugLog) Debug.LogWarning("[ProductionBuilding] Produce: beltItemPrefab is not set");
             return;
         }
+
+        _inputInventory.Dequeue();
         _pendingOutputCount++;
-        if (enableDebugLog) Debug.Log($"[ProductionBuilding] Produce: pending output +1, total={_pendingOutputCount}");
+        if (enableDebugLog)
+            Debug.Log($"[ProductionBuilding] consumed 1 input, pending output={_pendingOutputCount}, remaining inventory={_inputInventory.Count}");
     }
 
     private BeltItem CreateOutputBeltItem()
@@ -151,6 +210,7 @@ public class ProductionBuilding : Building, ItemSource
             BeltItem newItem = CreateOutputBeltItem();
             if (newItem == null) return;
 
+            newItem.id = outputItemId;
             if (belt.TryInputItem(newItem))
             {
                 _pendingOutputCount--;

@@ -1,9 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
-using UnityEditor;
 using System.Linq;
-using UnityEngine.InputSystem.Controls;
-using UnityEditor.TerrainTools;
 
 public class BuildingSystem : MonoBehaviour
 {
@@ -146,7 +143,7 @@ public class BuildingSystem : MonoBehaviour
         {
             preview.transform.position = mouseWorldPosition;
             List<Vector3> buildPosition = preview.BuildingModel.GetAllBuildingPositions();
-            bool CanBuild = grid.CanBuild(buildPosition);
+            bool CanBuild = grid.CanBuild(buildPosition, preview.Data);
             if(CanBuild)
             {   
                 Vector3 unitWorld = buildPosition[0];
@@ -185,7 +182,7 @@ public class BuildingSystem : MonoBehaviour
             preview.transform.position = snapped;
             preview.BuildingModel.transform.rotation = GetRotationFromDir(beltDir);
 
-            bool canBuild = grid.CanBuild(new List<Vector3> { snapped });
+            bool canBuild = grid.CanBuild(new List<Vector3> { snapped }, preview.Data);
             preview.ChangeState(canBuild
                 ? BuildingPreview.BuildingPreviewState.Positive
                 : BuildingPreview.BuildingPreviewState.Negative);
@@ -205,12 +202,12 @@ public class BuildingSystem : MonoBehaviour
             return;
         }
 
-        logisticsPreviewPath = FindPath(currentGrid);
+        logisticsPreviewPath = FindPath(currentGrid, preview.Data);
         UpdateLogisticsPathPreview(logisticsPreviewPath);
 
         if(Input.GetMouseButtonDown(0) && logisticsPreviewPath.Count > 0){
             bool canBuildPath = logisticsPreviewPath.TrueForAll(cell =>
-                grid.CanBuild(new List<Vector3> { GridToWorldCenter(cell) }));
+                grid.CanBuild(new List<Vector3> { GridToWorldCenter(cell) }, preview.Data));
 
             if(canBuildPath)
             {
@@ -230,7 +227,7 @@ public class BuildingSystem : MonoBehaviour
 
     }
 
-    private List<Vector2Int> FindPath(Vector2Int endGrid)
+    private List<Vector2Int> FindPath(Vector2Int endGrid, BuildingData logisticsBuilding)
     {
         Vector2Int startGrid = logisticsStartGrid;
         if(startGrid == endGrid) return new List<Vector2Int> {startGrid};
@@ -250,7 +247,7 @@ public class BuildingSystem : MonoBehaviour
                 Vector2Int next = cur + delta;
                 if(parent.ContainsKey(next)) continue;
 
-                if(!grid.CanBuild(new List<Vector3> {GridToWorldCenter(next)})) continue;
+                if(!grid.CanBuild(new List<Vector3> {GridToWorldCenter(next)}, logisticsBuilding)) continue;
 
                 parent[next] = cur;
                 if(next == endGrid)
@@ -392,6 +389,12 @@ public class BuildingSystem : MonoBehaviour
         if (productionBuilding != null)
         {
             productionBuilding.OnPlaced();
+        }
+
+        var minerBuilding = building.GetComponentInChildren<MinerBuilding>(true);
+        if (minerBuilding != null)
+        {
+            minerBuilding.OnPlaced();
         }
     }
 

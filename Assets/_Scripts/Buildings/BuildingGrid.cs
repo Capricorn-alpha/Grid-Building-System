@@ -8,8 +8,9 @@ public class BuildingGrid : MonoBehaviour
 
     [SerializeField] private int height;
     private BuildingGridCell[,] grid;
+    [SerializeField] private EnvironmentMapRuntime environmentMap;
 
-    private void Start()
+    private void Awake()
     {
         grid = new BuildingGridCell[width, height];
         for (int x = 0; x < grid.GetLength(0); x++)
@@ -19,6 +20,7 @@ public class BuildingGrid : MonoBehaviour
                 grid[x, y] = new();
             }
         }
+        if (environmentMap == null) environmentMap = FindFirstObjectByType<EnvironmentMapRuntime>();
     }
 
     public void SetBuilding(Building building, List<Vector3> allBuildingPositions)
@@ -30,15 +32,23 @@ public class BuildingGrid : MonoBehaviour
         }
     }
 
-    public bool CanBuild(List<Vector3> allBuildingPositions)
+    /// <param name="plannedBuilding">当前预览/即将放置的建筑数据；为 null 时矿点上禁止任何建造（保守策略）。</param>
+    public bool CanBuild(List<Vector3> allBuildingPositions, BuildingData plannedBuilding = null)
     {
         foreach (var p in allBuildingPositions)
         {
             Vector2Int gridPos = WorldToGridPosition(p);
             if(gridPos.x < 0 || gridPos.x >= width || gridPos.y < 0 || gridPos.y >= height) return false;
             if(!grid[gridPos.x, gridPos.y].IsEmpty()) return false;
+            if (environmentMap != null && !environmentMap.CanPlaceBuilding(gridPos, plannedBuilding)) return false;
         }
         return true;
+    }
+
+    public bool TryGetOreResourceIdAt(Vector2Int gridPosition, out string resourceId)
+    {
+        resourceId = null;
+        return environmentMap != null && environmentMap.TryGetOreResourceId(gridPosition, out resourceId);
     }
 
     public Vector2Int WorldToGridPosition(Vector3 worldPosition)
