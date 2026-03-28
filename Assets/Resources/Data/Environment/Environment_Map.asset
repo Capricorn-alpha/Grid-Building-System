@@ -17,7 +17,83 @@ MonoBehaviour:
     tileType: 1
     resourceId: Copper
     prefab: {fileID: 1848785505665710586, guid: 659b976a4b548264b9ed08d1dead95a6, type: 3}
-  - cell: {x: 0, y: 0}
+  - cell: {x: 10, y: 14}
     tileType: 2
     resourceId: 
     prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 15}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 16}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 17}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 18}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 19}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 20}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 21}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 10, y: 22}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 14}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 15}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 16}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 17}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 18}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 19}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 20}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 21}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 22}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 4647740668426338797, guid: 536b5dd98d869974f85ce4aa7d61ba04, type: 3}
+  - cell: {x: 12, y: 13}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 3229463186523974973, guid: 509afbc3dd165b34f9629370afb5b59c, type: 3}
+  - cell: {x: 10, y: 13}
+    tileType: 2
+    resourceId: 
+    prefab: {fileID: 3229463186523974973, guid: 509afbc3dd165b34f9629370afb5b59c, type: 3}

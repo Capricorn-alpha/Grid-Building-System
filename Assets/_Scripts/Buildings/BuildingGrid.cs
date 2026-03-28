@@ -10,6 +10,35 @@ public class BuildingGrid : MonoBehaviour
     private BuildingGridCell[,] grid;
     [SerializeField] private EnvironmentMapRuntime environmentMap;
 
+    [Header("Gizmo（与建造模式联动）")]
+    [Tooltip("指定场景中的 BuildingController；留空则自动查找第一个。仅当当前为宏观模式时绘制黄格。")]
+    [SerializeField] private BuildingController gizmoModeController;
+    [SerializeField] private Color macroGizmoColor = new(1f, 0.85f, 0.2f, 0.9f);
+
+    private BuildingController _resolvedModeController;
+
+    private BuildingController ResolvedModeController
+    {
+        get
+        {
+            if (gizmoModeController != null)
+                return gizmoModeController;
+            if (_resolvedModeController == null)
+                _resolvedModeController = FindFirstObjectByType<BuildingController>();
+            return _resolvedModeController;
+        }
+    }
+
+    private void OnEnable()
+    {
+        _resolvedModeController = null;
+    }
+
+    private void Reset()
+    {
+        gizmoModeController = FindFirstObjectByType<BuildingController>();
+    }
+
     private void Awake()
     {
         grid = new BuildingGridCell[width, height];
@@ -58,22 +87,31 @@ public class BuildingGrid : MonoBehaviour
         return new Vector2Int(x, y);   
     }
 
-    void OnDrawGizmos()
+    private void OnDrawGizmos()
     {
-        Gizmos.color = Color.yellow;
-        if(BuildingSystem.CellSize <= 0 || width <= 0 || height <= 0) return;
+        BuildingController modeSource = ResolvedModeController;
+        if (modeSource != null && !modeSource.IsGizmoActiveFor(BuildingController.BuildMode.Macro))
+            return;
+
+        if (BuildingSystem.CellSize <= 0f || width <= 0 || height <= 0)
+            return;
+
+        Gizmos.color = macroGizmoColor;
+        float yLift = 0.01f;
         Vector3 origin = transform.position;
-        for(int y = 0; y <= height; y++)
+        float cs = BuildingSystem.CellSize;
+
+        for (int gy = 0; gy <= height; gy++)
         {
-            Vector3 start = origin + new Vector3(0, 0.01f, y * BuildingSystem.CellSize);
-            Vector3 end = origin + new Vector3(width * BuildingSystem.CellSize, 0.01f, y * BuildingSystem.CellSize);
+            Vector3 start = origin + new Vector3(0f, yLift, gy * cs);
+            Vector3 end = origin + new Vector3(width * cs, yLift, gy * cs);
             Gizmos.DrawLine(start, end);
         }
 
-        for(int x = 0; x <= width; x++)
+        for (int gx = 0; gx <= width; gx++)
         {
-            Vector3 start = origin + new Vector3(x * BuildingSystem.CellSize, 0.01f, 0);
-            Vector3 end = origin + new Vector3(x * BuildingSystem.CellSize, 0.01f, height * BuildingSystem.CellSize);
+            Vector3 start = origin + new Vector3(gx * cs, yLift, 0f);
+            Vector3 end = origin + new Vector3(gx * cs, yLift, height * cs);
             Gizmos.DrawLine(start, end);
         }
     }

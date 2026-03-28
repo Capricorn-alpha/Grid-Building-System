@@ -9,9 +9,30 @@ public class BuildingSystem : MonoBehaviour
     [SerializeField] private BuildingPreview previewPrefab;
     [SerializeField] private Building buildingPrefab;
     [SerializeField] private BuildingGrid grid;
+    [Tooltip("微观建造模式使用的网格；留空则微观模式下无法放置（仍会按 Scope 过滤按键表）。")]
+    [SerializeField] private MiniBuildingGrid miniGrid;
+    [Tooltip("留空则自动查找场景中的 BuildingController。")]
+    [SerializeField] private BuildingController buildingController;
 
-    private Dictionary<KeyCode, BuildingData> keyToBuilding = new();
-    private Dictionary<KeyCode, BuildingData> keyToLogistics = new();
+    private readonly Dictionary<KeyCode, BuildingData> keyToBuildingMacro = new();
+    private readonly Dictionary<KeyCode, BuildingData> keyToBuildingMicro = new();
+    private readonly Dictionary<KeyCode, BuildingData> keyToLogisticsMacro = new();
+    private readonly Dictionary<KeyCode, BuildingData> keyToLogisticsMicro = new();
+
+    private Dictionary<KeyCode, BuildingData> ActiveKeyToBuilding =>
+        CurrentScope == BuildScope.Macro ? keyToBuildingMacro : keyToBuildingMicro;
+
+    private Dictionary<KeyCode, BuildingData> ActiveKeyToLogistics =>
+        CurrentScope == BuildScope.Macro ? keyToLogisticsMacro : keyToLogisticsMicro;
+
+    private BuildScope CurrentScope =>
+        buildingController != null && buildingController.CurrentMode == BuildingController.BuildMode.Micro
+            ? BuildScope.Micro
+            : BuildScope.Macro;
+
+    /// <summary>正在放置预览（含物流路径）时，其它系统（如建筑信息面板）应忽略左键选中逻辑。</summary>
+    public bool HasActivePlacementPreview => preview != null;
+
     private BuildingPreview preview;
 
     private bool isLogisticsMode = false;
@@ -25,24 +46,147 @@ public class BuildingSystem : MonoBehaviour
     private bool hasLastMousePos;
     private Vector3 beltDir = Vector3.forward;
 
+    private void Awake() => ResolveBuildingController();
+
+    private void OnEnable()
+    {
+        ResolveBuildingController();
+        if (buildingController != null)
+            buildingController.BuildModeChanged += OnBuildModeChanged;
+    }
+
+    private void ResolveBuildingController()
+    {
+        if (buildingController == null)
+            buildingController = FindFirstObjectByType<BuildingController>();
+    }
+
+    private void OnDisable()
+    {
+        if (buildingController != null)
+            buildingController.BuildModeChanged -= OnBuildModeChanged;
+    }
+
+    private void OnBuildModeChanged(BuildingController.BuildMode mode)
+    {
+        if (preview != null)
+        {
+            Destroy(preview.gameObject);
+            preview = null;
+        }
+
+        foreach (var p in logisticsPathPreviews)
+            Destroy(p.gameObject);
+        logisticsPathPreviews.Clear();
+
+        hasLogisticsStart = false;
+        logisticsPreviewPath.Clear();
+        isLogisticsMode = false;
+        currentHoveredBuilding = null;
+    }
+
     private void Start()
     {
-        int logisticsIndex = 0;
-        for(int i = 0; i < BuildingDatabase.All.Count && i < 9; i++)
+        FillKeyMap(keyToBuildingMacro, BuildingDatabase.GetNormalByScope(BuildScope.Macro));
+        FillKeyMap(keyToBuildingMicro, BuildingDatabase.GetNormalByScope(BuildScope.Micro));
+        FillKeyMap(keyToLogisticsMacro, BuildingDatabase.GetLogisticsByScope(BuildScope.Macro));
+        FillKeyMap(keyToLogisticsMicro, BuildingDatabase.GetLogisticsByScope(BuildScope.Micro));
+    }
+
+    private static void FillKeyMap(Dictionary<KeyCode, BuildingData> dict, IReadOnlyList<BuildingData> list)
+    {
+        dict.Clear();
+        for (int i = 0; i < list.Count && i < 9; i++)
+            dict[KeyCode.Alpha1 + i] = list[i];
+    }
+
+    private bool HasActiveGridForCurrentScope()
+    {
+        if (CurrentScope == BuildScope.Macro)
+            return grid != null;
+        return miniGrid != null;
+    }
+
+    private Vector3 ActiveGridOrigin()
+    {
+        if (CurrentScope == BuildScope.Macro)
+            return grid != null ? grid.transform.position : Vector3.zero;
+        if (miniGrid != null)
+            return miniGrid.transform.position;
+        return grid != null ? grid.transform.position : Vector3.zero;
+    }
+
+    private float ActiveCellSize()
+    {
+        if (CurrentScope == BuildScope.Macro)
+            return CellSize;
+        return miniGrid != null ? miniGrid.CellSize : CellSize;
+    }
+
+    private bool ActiveCanBuild(List<Vector3> positions, BuildingData data)
+    {
+        if (CurrentScope == BuildScope.Macro)
+            return grid != null && grid.CanBuild(positions, data);
+        return miniGrid != null && miniGrid.CanBuild(positions, data);
+    }
+
+    private void ActiveSetBuilding(Building building, List<Vector3> positions)
+    {
+        if (CurrentScope == BuildScope.Macro)
         {
-            var data = BuildingDatabase.All[i];
-            if(data.Category == BuildingCategory.Logistics){
-                if (logisticsIndex < 9)
-                {
-                    keyToLogistics[KeyCode.Alpha1 + logisticsIndex] = data;
-                    logisticsIndex++;
-                }
-            }
-            else
-            {
-                keyToBuilding[KeyCode.Alpha1 + i] = BuildingDatabase.All[i];
-            }
+            if (grid != null)
+                grid.SetBuilding(building, positions);
         }
+        else if (miniGrid != null)
+        {
+            miniGrid.SetBuilding(building, positions);
+        }
+    }
+
+    private Vector2Int ActiveWorldToGrid(Vector3 worldPosition)
+    {
+        if (CurrentScope == BuildScope.Macro)
+            return grid != null ? grid.WorldToGridPosition(worldPosition) : default;
+        if (miniGrid != null)
+            return miniGrid.WorldToGridPosition(worldPosition);
+        return grid != null ? grid.WorldToGridPosition(worldPosition) : default;
+    }
+
+    private Vector3 ActiveGridToWorldCenter(Vector2Int cell)
+    {
+        if (CurrentScope == BuildScope.Macro)
+        {
+            if (grid == null) return Vector3.zero;
+            Vector3 o = grid.transform.position;
+            return new Vector3(
+                o.x + (cell.x + 0.5f) * CellSize,
+                o.y,
+                o.z + (cell.y + 0.5f) * CellSize
+            );
+        }
+
+        if (miniGrid != null)
+            return miniGrid.GridToWorldCenter(cell);
+        if (grid == null) return Vector3.zero;
+        Vector3 og = grid.transform.position;
+        return new Vector3(
+            og.x + (cell.x + 0.5f) * CellSize,
+            og.y,
+            og.z + (cell.y + 0.5f) * CellSize
+        );
+    }
+
+    private Vector3 ActiveSnapWorldToCellCenter(Vector3 worldPos)
+    {
+        Vector3 o = ActiveGridOrigin();
+        float cs = ActiveCellSize();
+        float gx = Mathf.Floor((worldPos.x - o.x) / cs);
+        float gz = Mathf.Floor((worldPos.z - o.z) / cs);
+        return new Vector3(
+            o.x + (gx + 0.5f) * cs,
+            o.y,
+            o.z + (gz + 0.5f) * cs
+        );
     }
 
     private void Update()
@@ -72,7 +216,7 @@ public class BuildingSystem : MonoBehaviour
             }
         }
 
-        if(Input.GetKeyDown(KeyCode.E))
+        if (GameInput.KeyDown(KeyCode.E))
         {
             isLogisticsMode = !isLogisticsMode;
             Debug.Log("Logistics mode: " + isLogisticsMode);
@@ -88,18 +232,15 @@ public class BuildingSystem : MonoBehaviour
             HandlePreview(mousePos);
         }
         else
-        {   
-            if(!Input.anyKeyDown)
-            {
+        {
+            if (!HasActiveGridForCurrentScope())
                 return;
-            }
 
-            if(!isLogisticsMode)
+            if (!isLogisticsMode)
             {
-                
-                foreach(var kvp in keyToBuilding)
+                foreach (var kvp in ActiveKeyToBuilding)
                 {
-                    if(Input.GetKeyDown(kvp.Key))
+                    if (GameInput.KeyDown(kvp.Key))
                     {
                         preview = CreatePreview(kvp.Value, mousePos);
                         break;
@@ -108,29 +249,15 @@ public class BuildingSystem : MonoBehaviour
             }
             else
             {
-                foreach(var kvp in keyToLogistics)
+                foreach (var kvp in ActiveKeyToLogistics)
                 {
-                    if(Input.GetKeyDown(kvp.Key))
-                    {   
+                    if (GameInput.KeyDown(kvp.Key))
+                    {
                         preview = CreatePreview(kvp.Value, mousePos);
                         break;
                     }
                 }
             }
-            
-
-            // if(Input.GetKeyDown(KeyCode.Alpha1))
-            // {
-            //     preview = CreatePreview(buildingData1, mousePos);
-            // }
-            // else if(Input.GetKeyDown(KeyCode.Alpha2))
-            // {
-            //     preview = CreatePreview(buildingData2, mousePos);
-            // }
-            // else if(Input.GetKeyDown(KeyCode.Alpha3))
-            // {
-            //     preview = CreatePreview(buildingData3, mousePos);
-            // }
         }
     }
 
@@ -143,16 +270,16 @@ public class BuildingSystem : MonoBehaviour
         {
             preview.transform.position = mouseWorldPosition;
             List<Vector3> buildPosition = preview.BuildingModel.GetAllBuildingPositions();
-            bool CanBuild = grid.CanBuild(buildPosition, preview.Data);
+            bool CanBuild = ActiveCanBuild(buildPosition, preview.Data);
             if(CanBuild)
             {   
                 Vector3 unitWorld = buildPosition[0];
-                Vector3 snapped = SnapWorldToCellCenter(unitWorld);
+                Vector3 snapped = ActiveSnapWorldToCellCenter(unitWorld);
                 Vector3 offset = unitWorld - preview.transform.position;
                 preview.transform.position = snapped - offset;
 
                 preview.ChangeState(BuildingPreview.BuildingPreviewState.Positive);
-                if(Input.GetMouseButtonDown(0))
+                if (GameInput.LeftButtonDownThisFrame())
                 {
                     PlaceBuilding(buildPosition);
                 }
@@ -161,11 +288,12 @@ public class BuildingSystem : MonoBehaviour
             {
                 preview.ChangeState(BuildingPreview.BuildingPreviewState.Negative);
             }
-            if(Input.GetKeyDown(KeyCode.R))
+            if (GameInput.KeyDown(KeyCode.R))
             {
                 preview.Rotate(90);
             }
-            if(Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.Escape)){
+            if (GameInput.KeyDown(KeyCode.Q) || GameInput.KeyDown(KeyCode.Escape))
+            {
                 Destroy(preview.gameObject);
             }
         }
@@ -173,27 +301,27 @@ public class BuildingSystem : MonoBehaviour
 
     private void HandleLogisticsPreview(Vector3 mouseWorldPosition)
     {
-        Vector2Int currentGrid = grid.WorldToGridPosition(mouseWorldPosition);
+        Vector2Int currentGrid = ActiveWorldToGrid(mouseWorldPosition);
 
         if (!hasLogisticsStart)
         {
             Vector3 pos = mouseWorldPosition;
-            Vector3 snapped = SnapWorldToCellCenter(new Vector3(pos.x, grid.transform.position.y, pos.z));
+            Vector3 snapped = ActiveSnapWorldToCellCenter(new Vector3(pos.x, ActiveGridOrigin().y, pos.z));
             preview.transform.position = snapped;
             preview.BuildingModel.transform.rotation = GetRotationFromDir(beltDir);
 
-            bool canBuild = grid.CanBuild(new List<Vector3> { snapped }, preview.Data);
+            bool canBuild = ActiveCanBuild(new List<Vector3> { snapped }, preview.Data);
             preview.ChangeState(canBuild
                 ? BuildingPreview.BuildingPreviewState.Positive
                 : BuildingPreview.BuildingPreviewState.Negative);
 
-            if (Input.GetMouseButtonDown(0))
+            if (GameInput.LeftButtonDownThisFrame())
             {
                 logisticsStartGrid = currentGrid;
                 hasLogisticsStart = true;
             }
 
-            if (Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.Escape))
+            if (GameInput.KeyDown(KeyCode.Q) || GameInput.KeyDown(KeyCode.Escape))
             {
                 Destroy(preview.gameObject);
                 preview = null;
@@ -205,17 +333,18 @@ public class BuildingSystem : MonoBehaviour
         logisticsPreviewPath = FindPath(currentGrid, preview.Data);
         UpdateLogisticsPathPreview(logisticsPreviewPath);
 
-        if(Input.GetMouseButtonDown(0) && logisticsPreviewPath.Count > 0){
+        if (GameInput.LeftButtonDownThisFrame() && logisticsPreviewPath.Count > 0)
+        {
             bool canBuildPath = logisticsPreviewPath.TrueForAll(cell =>
-                grid.CanBuild(new List<Vector3> { GridToWorldCenter(cell) }, preview.Data));
+                ActiveCanBuild(new List<Vector3> { ActiveGridToWorldCenter(cell) }, preview.Data));
 
-            if(canBuildPath)
+            if (canBuildPath)
             {
                 PlaceLogisticsPath(logisticsPreviewPath);
             }
         }
         
-        if(Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.Escape))
+        if (GameInput.KeyDown(KeyCode.Q) || GameInput.KeyDown(KeyCode.Escape))
         {
             foreach(var p in logisticsPathPreviews) Destroy(p.gameObject);
             logisticsPathPreviews.Clear();
@@ -247,7 +376,7 @@ public class BuildingSystem : MonoBehaviour
                 Vector2Int next = cur + delta;
                 if(parent.ContainsKey(next)) continue;
 
-                if(!grid.CanBuild(new List<Vector3> {GridToWorldCenter(next)}, logisticsBuilding)) continue;
+                if(!ActiveCanBuild(new List<Vector3> {ActiveGridToWorldCenter(next)}, logisticsBuilding)) continue;
 
                 parent[next] = cur;
                 if(next == endGrid)
@@ -272,8 +401,8 @@ public class BuildingSystem : MonoBehaviour
         foreach (var p in logisticsPathPreviews) Destroy(p.gameObject);
         logisticsPathPreviews.Clear();
 
-        Vector3 startPos = GridToWorldCenter(path[0]);
-        Vector3 snappedStartPos = SnapWorldToCellCenter(new Vector3(startPos.x, grid.transform.position.y, startPos.z));
+        Vector3 startPos = ActiveGridToWorldCenter(path[0]);
+        Vector3 snappedStartPos = ActiveSnapWorldToCellCenter(new Vector3(startPos.x, ActiveGridOrigin().y, startPos.z));
         preview.transform.position = snappedStartPos;
 
         preview.ChangeState(BuildingPreview.BuildingPreviewState.Positive);
@@ -291,8 +420,8 @@ public class BuildingSystem : MonoBehaviour
 
         for(int i = 1; i < path.Count; i++)
         {
-            Vector3 pos = GridToWorldCenter(path[i]);
-            Vector3 snapped = SnapWorldToCellCenter(new Vector3(pos.x, grid.transform.position.y, pos.z));
+            Vector3 pos = ActiveGridToWorldCenter(path[i]);
+            Vector3 snapped = ActiveSnapWorldToCellCenter(new Vector3(pos.x, ActiveGridOrigin().y, pos.z));
 
             var segmentPreview = CreatePreview(preview.Data, snapped);
 
@@ -328,7 +457,7 @@ public class BuildingSystem : MonoBehaviour
                 ? preview.transform.position
                 : logisticsPathPreviews[i - 1].transform.position;
             
-            Vector3 snapped = SnapWorldToCellCenter(new Vector3(pos.x, grid.transform.position.y, pos.z));
+            Vector3 snapped = ActiveSnapWorldToCellCenter(new Vector3(pos.x, ActiveGridOrigin().y, pos.z));
 
             beltDir = Vector3.forward;
             if (i < path.Count - 1)
@@ -355,11 +484,11 @@ public class BuildingSystem : MonoBehaviour
             // pos = new Vector3(pos.x, grid.transform.position.y, pos.z);
             float yAngle = rot.eulerAngles.y;
             building.Setup(preview.Data, yAngle);
-            grid.SetBuilding(building, new List<Vector3> {snapped});
+            ActiveSetBuilding(building, new List<Vector3> {snapped});
 
             if (i == 0)
             {   
-                Vector2Int startCell = grid.WorldToGridPosition(snapped);
+                Vector2Int startCell = ActiveWorldToGrid(snapped);
                 Debug.Log($"[BuildingSystem] place belt start grid: ({startCell.x}, {startCell.y})");
                 var startBelt = building.GetComponentInChildren<Belt>(true);
                 if (startBelt != null)
@@ -380,7 +509,7 @@ public class BuildingSystem : MonoBehaviour
     {
         Building building = Instantiate(buildingPrefab, preview.transform.position, Quaternion.identity);
         building.Setup(preview.Data, preview.BuildingModel.Rotation);
-        grid.SetBuilding(building, buildingPosition);
+        ActiveSetBuilding(building, buildingPosition);
         Destroy(preview.gameObject);
         preview = null;
         building.OnPlaced();
@@ -400,7 +529,9 @@ public class BuildingSystem : MonoBehaviour
 
     private void UpdateBuildingPortsHints(Vector3 mousePos)
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (!GameInput.TryGetPointerScreen(out Vector2 screen) || Camera.main == null)
+            return;
+        Ray ray = Camera.main.ScreenPointToRay(screen);
         RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         foreach (var hit in hits)
@@ -431,18 +562,6 @@ public class BuildingSystem : MonoBehaviour
         building.SetPortsVisualsActive(true);
     }
 
-    private Vector3 SnapWorldToCellCenter(Vector3 worldPos)
-    {
-        Vector3 o = grid.transform.position;
-        float gx = Mathf.Floor((worldPos.x - o.x) / CellSize);
-        float gz = Mathf.Floor((worldPos.z - o.z) / CellSize);
-        return new Vector3(
-            o.x + (gx + 0.5f) * CellSize,
-            o.y,
-            o.z + (gz + 0.5f) * CellSize
-        );
-    }
-
     private Vector3 GetSnappedCenterPosition(List<Vector3> allBuildingPositions)
     {
         // Vector3 gridOrigin = grid.transform.position;
@@ -467,17 +586,20 @@ public class BuildingSystem : MonoBehaviour
 
         List<int> xs = allBuildingPositions.Select(p => Mathf.FloorToInt(p.x)).ToList();
         List<int> zs = allBuildingPositions.Select(p => Mathf.FloorToInt(p.z)).ToList();
-        float centerX = (xs.Min() + xs.Max()) / 2f + CellSize / 2f;
-        float centerZ = (zs.Min() + zs.Max()) / 2f + CellSize / 2f;
+        float cs = ActiveCellSize();
+        float centerX = (xs.Min() + xs.Max()) / 2f + cs / 2f;
+        float centerZ = (zs.Min() + zs.Max()) / 2f + cs / 2f;
 
         return new(centerX, 0, centerZ);
     }
 
     private Vector3 GetMouseWorldPosition()
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (!GameInput.TryGetPointerScreen(out Vector2 screen) || Camera.main == null)
+            return Vector3.zero;
+        Ray ray = Camera.main.ScreenPointToRay(screen);
         Plane groundPlane = new(Vector3.up, Vector3.zero);
-        if(groundPlane.Raycast(ray, out float distance))
+        if (groundPlane.Raycast(ray, out float distance))
         {
             return ray.GetPoint(distance);
         }
@@ -489,15 +611,6 @@ public class BuildingSystem : MonoBehaviour
         BuildingPreview buildingPreview = Instantiate(previewPrefab, position, Quaternion.identity);
         buildingPreview.Setup(data);
         return buildingPreview;
-    }
-
-    private Vector3 GridToWorldCenter(Vector2Int cell){
-        Vector3 o = grid.transform.position;
-        return new Vector3(
-            o.x + (cell.x + 0.5f) * CellSize,
-            o.y,
-            o.z + (cell.y + 0.5f) * CellSize
-        );
     }
 
     Quaternion GetRotationFromDir(Vector3 dir)
